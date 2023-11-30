@@ -23,7 +23,8 @@ public class Function
         _context = new DynamoDBContext(_client);
     }
 
-    public async Task<APIGatewayProxyResponse> FunctionHandler(APIGatewayProxyRequest request, ILambdaContext context)
+    public async Task<APIGatewayProxyResponse> FunctionHandler
+        (APIGatewayProxyRequest request, ILambdaContext context)
     {
         var userId = request.QueryStringParameters["userId"];
 
@@ -32,7 +33,43 @@ public class Function
         var result = new List<GetAllChatsResponseItem>(chats.Count);
 
 		// TODO 
+        request.QueryStringParameters.TryGetValue("pageSize", out var pageSizeString);
+        int.TryParse(pageSizeString, out var pageSize);
+        pageSize = pageSize == 0 ? 50 : pageSize;
 		
+        if (pageSize > 1000 || pageSize < 1)
+        {
+            return new APIGatewayProxyResponse()
+            {
+                StatusCode = (int)HttpStatusCode.OK,
+                Headers = new Dictionary<string, string>
+                {
+                    { "Content-Type", "application/json" },
+                    { "Access-Control-Allow-Origin", "*" }
+                },
+
+                Body = "Invalid pageSize."
+            };
+        }
+
+        request.QueryStringParameters.TryGetValue("lastid", out var lastId);
+
+        Dictionary<String, DynamoDBEntry> newDictionary = new Dictionary<String, DynamoDBEntry>();
+        foreach (var item in chats)
+        {
+            if (item.UpdateDt <= lastId)
+            {
+                newDictionary.Add(":chatId", chatId);
+            }
+        }
+
+        result = newDictionary;
+
+        if (lastId != null)
+        {
+            chats.PaginationToken = lastId;
+        }
+
         return new APIGatewayProxyResponse
         {
             StatusCode = (int)HttpStatusCode.OK,
